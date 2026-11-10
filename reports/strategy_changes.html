@@ -9,6 +9,19 @@ recording trades that couldn&#x27;t really happen, and are recorded here too.
 
 To undo a change, restore the setting named in its entry in `config.json`.
 
+## 2026-11-10: US Paper Trader only: 1 stock per sector, no quality filter
+
+- **Settings (config_us.json only; the ASX rules are unchanged):** `strategy.max_per_sector: 1`,
+  `strategy.use_quality_filter: false`. Previous file:
+  `data/us/config_backups/config_us_2026-11-10.json`.
+- **Why:** the first 3-year test on S&amp;P 500 prices (`reports/us/backtest_2026-11-10.md`). From 4
+  start dates the ASX rules made a median +31.0% (worst start +26.7%, median worst drop -20.9%)
+  against +80.5% for holding the S&amp;P 500. With both changes: median +137.2%, worst start +67.9%,
+  median worst drop -15.8%. Each change also helped on its own.
+- **Caution:** today&#x27;s S&amp;P 500 list is used for the whole period, which flatters these results,
+  most of all without the quality filter.
+- **Undo:** set `max_per_sector` to 0 and `use_quality_filter` to true in config_us.json.
+
 ## 2026-11-08 (evening): Share-issuance filter switched on
 
 - **Setting:** `strategy.max_share_growth_pct: 20` (previous file in
