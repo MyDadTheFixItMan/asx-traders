@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="600">
+<title>ASX Paper Trader</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#16181d;--muted:#667085;--line:#e4e7ec;
+--up:#0f8a4b;--down:#c8322b;--accent:#2f5bea;--chip:#eef2ff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--text:#e7e9ee;
+--muted:#98a2b3;--line:#272c36;--up:#3ccf86;--down:#ff6b61;--accent:#7b9bff;--chip:#1e2433}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 16px 48px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:8px}
+h1{font-size:22px;margin:0}
+h2{font-size:15px;margin:0 0 12px}
+.muted{color:var(--muted)}
+.banner{margin:12px 0 20px;padding:10px 14px;border-radius:10px;background:var(--chip);
+color:var(--muted);font-size:13px}
+.alert{display:none;margin:12px 0;padding:12px 14px;border-radius:10px;font-weight:600;
+background:color-mix(in srgb,var(--down) 15%,transparent);color:var(--down);
+border:1px solid var(--down)}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.stat .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.stat .value{font-size:22px;font-weight:650;margin-top:4px;font-variant-numeric:tabular-nums}
+.stat .sub{font-size:12px;margin-top:2px}
+.up{color:var(--up)} .down{color:var(--down)}
+.section{margin-top:16px}
+.two{display:grid;gap:12px;grid-template-columns:2fr 1fr}
+@media (max-width:820px){.two{grid-template-columns:1fr}}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{border:1px solid var(--line);background:transparent;color:var(--text);
+padding:5px 12px;border-radius:999px;cursor:pointer;font:inherit}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--muted);font-weight:600;font-size:12px}
+th:first-child,td:first-child{text-align:left}
+td.reason{text-align:left;white-space:normal;color:var(--muted);min-width:260px;font-size:13px}
+.side{font-weight:700;font-size:12px;padding:2px 8px;border-radius:6px}
+.side.BUY{background:color-mix(in srgb,var(--up) 15%,transparent);color:var(--up)}
+.side.SELL{background:color-mix(in srgb,var(--down) 15%,transparent);color:var(--down)}
+.empty{color:var(--muted);padding:16px 0;text-align:center}
+.chartbox{position:relative;height:280px}
+a{color:var(--accent)}
+.bar{height:6px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--accent)}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--text);padding:6px 14px;
+border-radius:999px;cursor:pointer;font:inherit}
+.btn:disabled{opacity:.6;cursor:wait}
+.actions{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title"></h1>
+    <span class="muted">Updated <span id="updated"></span> (<span id="city"></span> time) · checks <span id="checks"></span> on GitHub</span>
+  </header>
+  <div class="actions"><button class="btn" id="updateBtn" type="button">&#8635; Update now</button>
+    <span class="muted" id="updateNote"></span></div>
+  <div class="alert" id="staleAlert" role="alert"></div>
+  <div class="banner">Simulated trading only, with no real money. Prices come from Yahoo Finance
+    and <span id="delayNote"></span>. Includes <span id="feeNote"></span> brokerage per trade<span id="slipNote"></span>.
+    <span id="marketNote"></span></div>
+
+  <div class="grid" id="stats"></div>
+
+  <div class="two section">
+    <div class="card">
+      <h2>Portfolio value (every check)</h2>
+      <div class="chartbox"><canvas id="equityChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Profit / loss by period</h2>
+      <div class="tabs" id="periodTabs">
+        <button data-k="daily" class="on">Daily</button>
+        <button data-k="weekly">Weekly</button>
+        <button data-k="monthly">Monthly</button>
+      </div>
+      <div class="chartbox" style="height:200px"><canvas id="periodChart"></canvas></div>
+      <div class="scroll"><table id="periodTable"></table></div>
+    </div>
+  </div>
+
+  <div class="card section">
+    <h2>Shares held now</h2>
+    <div class="scroll"><table id="positions"></table></div>
+  </div>
+
+  <div class="card section">
+    <h2>Daily review: why the portfolio moved</h2>
+    <div class="scroll"><table id="reviews"></table></div>
+    <ul class="muted" id="reviewNotes"></ul>
+  </div>
+
+  <div class="card section">
+    <h2>Trade history (newest first)</h2>
+    <div class="scroll"><table id="trades"></table></div>
+  </div>
+
+  <p class="muted section" id="rules"></p>
+</div>
+
+<script>
+const D = {"updated": "Tue 10 Nov 2026, 03:17 AM", "updated_at": "2026-11-10T03:17", "summary": {"equity": 10000.0, "cash": 10000.0, "holdings": 0, "start": 10000.0, "total": 0.0, "total_pct": 0.0, "today": 0.0, "week": 0.0, "month": 0.0, "realised": 0, "fees": 0, "trades": 0, "win_rate": null, "weekly_goal": 800.0}, "equity_series": [["2026-11-10 02:31", 10000.0], ["2026-11-10 02:41", 10000.0], ["2026-11-10 03:17", 10000.0]], "daily": [{"period": "2026-11-10", "equity": 10000.0, "change": 0.0, "pct": 0.0}], "weekly": [{"period": "2026-11-15", "equity": 10000.0, "change": 0.0, "pct": 0.0}], "monthly": [{"period": "2026-11-30", "equity": 10000.0, "change": 0.0, "pct": 0.0}], "positions": [], "trades": [], "names": {"A": "Agilent Technologies, Inc.", "AAPL": "Apple Inc.", "ABBV": "AbbVie Inc.", "ABNB": "Airbnb, Inc.", "ABT": "Abbott Laboratories", "ACGL": "Arch Capital Group Ltd.", "ACN": "Accenture plc", "ADBE": "Adobe Inc.", "ADI": "Analog Devices, Inc.", "ADM": "Archer-Daniels-Midland Company", "ADP": "Automatic Data Processing, Inc.", "ADSK": "Autodesk, Inc.", "AEE": "Ameren Corporation", "AEP": "American Electric Power Company, Inc.", "AES": "The AES Corporation", "AFL": "Aflac Incorporated", "AIG": "American International Group, Inc.", "AIZ": "Assurant, Inc.", "AJG": "Arthur J. Gallagher & Co.", "AKAM": "Akamai Technologies, Inc.", "ALB": "Albemarle Corporation", "ALGN": "Align Technology, Inc.", "ALL": "The Allstate Corporation", "ALLE": "Allegion plc", "AMAT": "Applied Materials, Inc.", "AMCR": "Amcor plc", "AMD": "Advanced Micro Devices, Inc.", "AME": "AMETEK, Inc.", "AMGN": "Amgen Inc.", "AMP": "Ameriprise Financial, Inc.", "AMT": "American Tower Corporation", "AMZN": "Amazon.com, Inc.", "ANET": "Arista Networks, Inc.", "AON": "Aon plc", "AOS": "A. O. Smith Corporation", "APA": "APA Corporation", "APD": "Air Products and Chemicals, Inc.", "APH": "Amphenol Corporation", "APO": "Apollo Global Management, Inc.", "APP": "AppLovin Corporation", "APTV": "Aptiv PLC", "ARE": "Alexandria Real Estate Equities, Inc.", "ARES": "Ares Management Corporation", "ATO": "Atmos Energy Corporation", "AVGO": "Broadcom Inc.", "AVY": "Avery Dennison Corporation", "AWK": "American Water Works Company, Inc.", "AXON": "Axon Enterprise, Inc.", "AXP": "American Express Company", "AZO": "AutoZone, Inc.", "BA": "The Boeing Company", "BAC": "Bank of America Corporation", "BALL": "Ball Corporation", "BAX": "Baxter International Inc.", "BBY": "Best Buy Co., Inc.", "BDX": "Becton, Dickinson and Company", "BE": "Bloom Energy Corporation", "BEN": "Franklin Templeton Inc.", "BF-B": "Brown-Forman Corporation", "BG": "Bunge Global SA", "BIIB": "Biogen Inc.", "BKNG": "Booking Holdings Inc.", "BKR": "Baker Hughes Company", "BLK": "BlackRock, Inc.", "BMY": "Bristol-Myers Squibb Company", "BNY": "The Bank of New York Mellon Corporation", "BR": "Broadridge Financial Solutions, Inc.", "BRK-B": "Berkshire Hathaway Inc.", "BRO": "Brown & Brown, Inc.", "BSX": "Boston Scientific Corporation", "BX": "Blackstone Inc.", "BXP": "BXP, Inc.", "C": "Citigroup Inc.", "CAH": "Cardinal Health, Inc.", "CARR": "Carrier Global Corporation", "CASY": "Casey's General Stores, Inc.", "CAT": "Caterpillar Inc.", "CB": "Chubb Limited", "CBOE": "Cboe Global Markets, Inc.", "CBRE": "CBRE Group, Inc.", "CCI": "Crown Castle Inc.", "CCL": "Carnival Corporation Ltd.", "CDNS": "Cadence Design Systems, Inc.", "CDW": "CDW Corporation", "CEG": "Constellation Energy Corporation", "CF": "CF Industries Holdings, Inc.", "CFG": "Citizens Financial Group, Inc.", "CHD": "Church & Dwight Co., Inc.", "CHRW": "C.H. Robinson Worldwide, Inc.", "CHTR": "Charter Communications, Inc.", "CI": "The Cigna Group", "CIEN": "Ciena Corporation", "CINF": "Cincinnati Financial Corporation", "CL": "Colgate-Palmolive Company", "CLX": "The Clorox Company", "CMCSA": "Comcast Corporation", "CME": "CME Group Inc.", "CMG": "Chipotle Mexican Grill, Inc.", "CMI": "Cummins Inc.", "CMS": "CMS Energy Corporation", "CNC": "Centene Corporation", "CNP": "CenterPoint Energy, Inc.", "COF": "Capital One Financial Corporation", "COHR": "Coherent Corp.", "COIN": "Coinbase Global, Inc.", "COO": "The Cooper Companies, Inc.", "COP": "ConocoPhillips", "COR": "Cencora, Inc.", "COST": "Costco Wholesale Corporation", "CPAY": "Corpay, Inc.", "CPRT": "Copart, Inc.", "CPT": "Camden Property Trust", "CRH": "CRH plc", "CRL": "Charles River Laboratories International, Inc.", "CRM": "Salesforce, Inc.", "CRWD": "CrowdStrike Holdings, Inc.", "CSCO": "Cisco Systems, Inc.", "CSGP": "CoStar Group, Inc.", "CSX": "CSX Corporation", "CTAS": "Cintas Corporation", "CTSH": "Cognizant Technology Solutions Corporation", "CVNA": "Carvana Co.", "CVS": "CVS Health Corporation", "CVX": "Chevron Corporation", "D": "Dominion Energy, Inc.", "DAL": "Delta Air Lines, Inc.", "DASH": "DoorDash, Inc.", "DD": "DuPont de Nemours, Inc.", "DDOG": "Datadog, Inc.", "DE": "Deere & Company", "DECK": "Deckers Outdoor Corporation", "DELL": "Dell Technologies Inc.", "DG": "Dollar General Corporation", "DGX": "Quest Diagnostics Incorporated", "DHI": "D.R. Horton, Inc.", "DHR": "Danaher Corporation", "DIS": "The Walt Disney Company", "DLR": "Digital Realty Trust, Inc.", "DLTR": "Dollar Tree, Inc.", "DOC": "Healthpeak Properties, Inc.", "DOV": "Dover Corporation", "DOW": "Dow Inc.", "DPZ": "Domino's Pizza, Inc.", "DRI": "Darden Restaurants, Inc.", "DTE": "DTE Energy Company", "DUK": "Duke Energy Corporation", "DVA": "DaVita Inc.", "DVN": "Devon Energy Corporation", "DXCM": "DexCom, Inc.", "EBAY": "eBay Inc.", "ECHO": "EchoStar Corporation", "ECL": "Ecolab Inc.", "ED": "Consolidated Edison, Inc.", "EFX": "Equifax Inc.", "EG": "Everest Group, Ltd.", "EIX": "Edison International", "EL": "The Est\u00e9e Lauder Companies Inc.", "ELV": "Elevance Health, Inc.", "EME": "EMCOR Group, Inc.", "EMR": "Emerson Electric Co.", "EOG": "EOG Resources, Inc.", "EQIX": "Equinix, Inc.", "EQT": "EQT Corporation", "ERIE": "Erie Indemnity Company", "ES": "Eversource Energy", "ESS": "Essex Property Trust, Inc.", "ETN": "Eaton Corporation plc", "ETR": "Entergy Corporation", "EVRG": "Evergy, Inc.", "EW": "Edwards Lifesciences Corporation", "EXC": "Exelon Corporation", "EXE": "Expand Energy Corporation", "EXPD": "Expeditors International of Washington, Inc.", "EXPE": "Expedia Group, Inc.", "EXR": "Extra Space Storage Inc.", "F": "Ford Motor Company", "FANG": "Diamondback Energy, Inc.", "FAST": "Fastenal Company", "FCX": "Freeport-McMoRan Inc.", "FDS": "FactSet Research Systems Inc.", "FDX": "FedEx Corporation", "FDXF": "FedEx Freight Holding Company, Inc.", "FE": "FirstEnergy Corp.", "FERG": "Ferguson Enterprises Inc.", "FFIV": "F5, Inc.", "FICO": "Fair Isaac Corporation", "FIS": "Fidelity National Information Services, Inc.", "FISV": "Fiserv, Inc.", "FITB": "Fifth Third Bancorp", "FIX": "Comfort Systems USA, Inc.", "FLEX": "Flex Ltd.", "FOX": "Fox Corporation", "FOXA": "Fox Corporation", "FRT": "Federal Realty Investment Trust", "FSLR": "First Solar, Inc.", "FTNT": "Fortinet, Inc.", "FTV": "Fortive Corporation", "GD": "General Dynamics Corporation", "GDDY": "GoDaddy Inc.", "GE": "GE Aerospace", "GEHC": "GE HealthCare Technologies Inc.", "GEN": "Gen Digital Inc.", "GEV": "GE Vernova Inc.", "GILD": "Gilead Sciences, Inc.", "GIS": "General Mills, Inc.", "GL": "Globe Life Inc.", "GLW": "Corning Incorporated", "GM": "General Motors Company", "GNRC": "Generac Holdings Inc.", "GOOG": "Alphabet Inc.", "GOOGL": "Alphabet Inc.", "GPC": "Genuine Parts Company", "GPN": "Global Payments Inc.", "GRMN": "Garmin Ltd.", "GS": "The Goldman Sachs Group, Inc.", "GWW": "W.W. Grainger, Inc.", "HAL": "Halliburton Company", "HAS": "Hasbro, Inc.", "HBAN": "Huntington Bancshares Incorporated", "HCA": "HCA Healthcare, Inc.", "HD": "The Home Depot, Inc.", "HIG": "The Hartford Insurance Group, Inc.", "HII": "Huntington Ingalls Industries, Inc.", "HLT": "Hilton Worldwide Holdings Inc.", "HON": "Honeywell International Inc.", "HONA": "Honeywell Aerospace Inc.", "HOOD": "Robinhood Markets, Inc.", "HPE": "Hewlett Packard Enterprise Company", "HPQ": "HP Inc.", "HRL": "Hormel Foods Corporation", "HSIC": "Henry Schein, Inc.", "HST": "Host Hotels & Resorts, Inc.", "HSY": "The Hershey Company", "HUBB": "Hubbell Incorporated", "HUM": "Humana Inc.", "HWM": "Howmet Aerospace Inc.", "IBKR": "Interactive Brokers Group, Inc.", "IBM": "International Business Machines Corporation", "ICE": "Intercontinental Exchange, Inc.", "IDXX": "IDEXX Laboratories, Inc.", "IEX": "IDEX Corporation", "IFF": "International Flavors & Fragrances Inc.", "ILMN": "Illumina, Inc.", "INCY": "Incyte Corporation", "INTC": "Intel Corporation", "INTU": "Intuit Inc.", "INVH": "Invitation Homes Inc.", "IP": "International Paper Company", "IQV": "IQVIA Holdings Inc.", "IR": "Ingersoll Rand Inc.", "IRM": "Iron Mountain Incorporated", "ISRG": "Intuitive Surgical, Inc.", "IT": "Gartner, Inc.", "ITW": "Illinois Tool Works Inc.", "IVZ": "Invesco Ltd.", "J": "Jacobs Solutions Inc.", "JBHT": "J.B. Hunt Transport Services, Inc.", "JBL": "Jabil Inc.", "JCI": "Johnson Controls International plc", "JKHY": "Jack Henry & Associates, Inc.", "JNJ": "Johnson & Johnson", "JPM": "JPMorgan Chase & Co.", "KDP": "Keurig Dr Pepper Inc.", "KEY": "KeyCorp", "KEYS": "Keysight Technologies, Inc.", "KHC": "The Kraft Heinz Company", "KIM": "Kimco Realty Corporation", "KKR": "KKR & Co. Inc.", "KLAC": "KLA Corporation", "KMB": "Kimberly-Clark Corporation", "KMI": "Kinder Morgan, Inc.", "KO": "The Coca-Cola Company", "KR": "The Kroger Co.", "L": "Loews Corporation", "LDOS": "Leidos Holdings, Inc.", "LEN": "Lennar Corporation", "LH": "Labcorp Holdings Inc.", "LHX": "L3Harris Technologies, Inc.", "LII": "Lennox International Inc.", "LIN": "Linde plc", "LITE": "Lumentum Holdings Inc.", "LLY": "Eli Lilly and Company", "LMT": "Lockheed Martin Corporation", "LNT": "Alliant Energy Corporation", "LOW": "Lowe's Companies, Inc.", "LRCX": "Lam Research Corporation", "LULU": "lululemon athletica inc.", "LUV": "Southwest Airlines Co.", "LVS": "Las Vegas Sands Corp.", "LYB": "LyondellBasell Industries N.V.", "LYV": "Live Nation Entertainment, Inc.", "MA": "Mastercard Incorporated", "MAA": "Mid-America Apartment Communities, Inc.", "MAR": "Marriott International, Inc.", "MAS": "Masco Corporation", "MCD": "McDonald's Corporation", "MCHP": "Microchip Technology Incorporated", "MCK": "McKesson Corporation", "MCO": "Moody's Corporation", "MDLZ": "Mondelez International, Inc.", "MDT": "Medtronic plc", "MET": "MetLife, Inc.", "META": "Meta Platforms, Inc.", "MGM": "MGM Resorts International", "MKC": "McCormick & Company, Incorporated", "MLM": "Martin Marietta Materials, Inc.", "MMM": "3M Company", "MNST": "Monster Beverage Corporation", "MO": "Altria Group, Inc.", "MOS": "The Mosaic Company", "MPC": "Marathon Petroleum Corporation", "MPWR": "Monolithic Power Systems, Inc.", "MRK": "Merck & Co., Inc.", "MRNA": "Moderna, Inc.", "MRSH": "Marsh & McLennan Companies, Inc.", "MRVL": "Marvell Technology, Inc.", "MS": "Morgan Stanley", "MSCI": "MSCI Inc.", "MSFT": "Microsoft Corporation", "MSI": "Motorola Solutions, Inc.", "MTB": "M&T Bank Corporation", "MTD": "Mettler-Toledo International Inc.", "MU": "Micron Technology, Inc.", "NCLH": "Norwegian Cruise Line Holdings Ltd.", "NDAQ": "Nasdaq, Inc.", "NDSN": "Nordson Corporation", "NEE": "NextEra Energy, Inc.", "NEM": "Newmont Corporation", "NFLX": "Netflix, Inc.", "NI": "NiSource Inc.", "NKE": "NIKE, Inc.", "NOC": "Northrop Grumman Corporation", "NOW": "ServiceNow, Inc.", "NRG": "NRG Energy, Inc.", "NSC": "Norfolk Southern Corporation", "NTAP": "NetApp, Inc.", "NTRS": "Northern Trust Corporation", "NUE": "Nucor Corporation", "NVDA": "NVIDIA Corporation", "NVR": "NVR, Inc.", "NWS": "News Corporation", "NWSA": "News Corporation", "NXPI": "NXP Semiconductors N.V.", "O": "Realty Income Corporation", "ODFL": "Old Dominion Freight Line, Inc.", "OKE": "ONEOK, Inc.", "OKTA": "Okta, Inc.", "OMC": "Omnicom Group Inc.", "ON": "ON Semiconductor Corporation", "ORCL": "Oracle Corporation", "ORLY": "O'Reilly Automotive, Inc.", "OTIS": "Otis Worldwide Corporation", "OXY": "Occidental Petroleum Corporation", "P": "Everpure, Inc.", "PANW": "Palo Alto Networks, Inc.", "PAYX": "Paychex, Inc.", "PCAR": "PACCAR Inc", "PCG": "PG&E Corporation", "PEG": "Public Service Enterprise Group Incorporated", "PEP": "PepsiCo, Inc.", "PFE": "Pfizer Inc.", "PFG": "Principal Financial Group, Inc.", "PG": "The Procter & Gamble Company", "PGR": "The Progressive Corporation", "PH": "Parker-Hannifin Corporation", "PHM": "PulteGroup, Inc.", "PKG": "Packaging Corporation of America", "PLD": "Prologis, Inc.", "PLTR": "Palantir Technologies Inc.", "PM": "Philip Morris International Inc.", "PNC": "The PNC Financial Services Group, Inc.", "PNR": "Pentair plc", "PNW": "Pinnacle West Capital Corporation", "PODD": "Insulet Corporation", "PPG": "PPG Industries, Inc.", "PPL": "PPL Corporation", "PRU": "Prudential Financial, Inc.", "PSA": "Public Storage", "PSX": "Phillips 66", "PTC": "PTC Inc.", "PWR": "Quanta Services, Inc.", "PYPL": "PayPal Holdings, Inc.", "Q": "Qnity Electronics, Inc.", "QCOM": "QUALCOMM Incorporated", "RCL": "Royal Caribbean Cruises Ltd.", "RDDT": "Reddit, Inc.", "REG": "Regency Centers Corporation", "REGN": "Regeneron Pharmaceuticals, Inc.", "RF": "Regions Financial Corporation", "RJF": "Raymond James Financial, Inc.", "RL": "Ralph Lauren Corporation", "RMD": "ResMed Inc.", "ROK": "Rockwell Automation, Inc.", "ROL": "Rollins, Inc.", "ROP": "Roper Technologies, Inc.", "ROST": "Ross Stores, Inc.", "RSG": "Republic Services, Inc.", "RTX": "RTX Corporation", "RVTY": "Revvity, Inc.", "SBAC": "SBA Communications Corporation", "SBUX": "Starbucks Corporation", "SCHW": "The Charles Schwab Corporation", "SHW": "The Sherwin-Williams Company", "SJM": "The J. M. Smucker Company", "SKYD": "Skydance Corporation", "SLB": "SLB N.V.", "SMCI": "Super Micro Computer, Inc.", "SNA": "Snap-on Incorporated", "SNDK": "Sandisk Corporation", "SNPS": "Synopsys, Inc.", "SO": "The Southern Company", "SOLV": "Solventum Corporation", "SPG": "Simon Property Group, Inc.", "SPGI": "S&P Global Inc.", "SRE": "Sempra", "STE": "STERIS plc", "STLD": "Steel Dynamics, Inc.", "STT": "State Street Corporation", "STX": "Seagate Technology Holdings plc", "STZ": "Constellation Brands, Inc.", "SW": "Smurfit Westrock Plc", "SWK": "Stanley Black & Decker, Inc.", "SWKS": "Skyworks Solutions, Inc.", "SYF": "Synchrony Financial", "SYK": "Stryker Corporation", "SYY": "Sysco Corporation", "T": "AT&T Inc.", "TDG": "TransDigm Group Incorporated", "TDY": "Teledyne Technologies Incorporated", "TECH": "Bio-Techne Corporation", "TEL": "TE Connectivity plc", "TER": "Teradyne, Inc.", "TFC": "Truist Financial Corporation", "TGT": "Target Corporation", "TJX": "The TJX Companies, Inc.", "TKO": "TKO Group Holdings, Inc.", "TMO": "Thermo Fisher Scientific Inc.", "TMUS": "T-Mobile US, Inc.", "TPL": "Texas Pacific Land Corporation", "TPR": "Tapestry, Inc.", "TRGP": "Targa Resources Corp.", "TRMB": "Trimble Inc.", "TROW": "T. Rowe Price Group, Inc.", "TRV": "The Travelers Companies, Inc.", "TSCO": "Tractor Supply Company", "TSLA": "Tesla, Inc.", "TSN": "Tyson Foods, Inc.", "TT": "Trane Technologies plc", "TTWO": "Take-Two Interactive Software, Inc.", "TWLO": "Twilio Inc.", "TXN": "Texas Instruments Incorporated", "TXT": "Textron Inc.", "TYL": "Tyler Technologies, Inc.", "UAL": "United Airlines Holdings, Inc.", "UBER": "Uber Technologies, Inc.", "UDR": "UDR, Inc.", "UHS": "Universal Health Services, Inc.", "ULTA": "Ulta Beauty, Inc.", "UNH": "UnitedHealth Group Incorporated", "UNP": "Union Pacific Corporation", "UPS": "United Parcel Service, Inc.", "URI": "United Rentals, Inc.", "USB": "U.S. Bancorp", "V": "Visa Inc.", "VEEV": "Veeva Systems Inc.", "VICI": "VICI Properties Inc.", "VLO": "Valero Energy Corporation", "VLTO": "Veralto Corporation", "VMC": "Vulcan Materials Company", "VMRK": "AvalonBay Communities, Inc.", "VRSK": "Verisk Analytics, Inc.", "VRSN": "VeriSign, Inc.", "VRT": "Vertiv Holdings Co", "VRTX": "Vertex Pharmaceuticals Incorporated", "VST": "Vistra Corp.", "VTR": "Ventas, Inc.", "VTRS": "Viatris Inc.", "VYLR": "Vylor Inc.", "VZ": "Verizon Communications Inc.", "WAB": "Westinghouse Air Brake Technologies Corporation", "WAT": "Waters Corporation", "WDAY": "Workday, Inc.", "WDC": "Western Digital Corporation", "WEC": "WEC Energy Group, Inc.", "WELL": "Welltower Inc.", "WFC": "Wells Fargo & Company", "WM": "Waste Management, Inc.", "WMB": "The Williams Companies, Inc.", "WMT": "Walmart Inc.", "WRB": "W. R. Berkley Corporation", "WSM": "Williams-Sonoma, Inc.", "WST": "West Pharmaceutical Services, Inc.", "WTW": "Willis Towers Watson Public Limited Company", "WY": "Weyerhaeuser Company", "WYNN": "Wynn Resorts, Limited", "XEL": "Xcel Energy Inc.", "XOM": "ExxonMobil Holdings Corporation", "XYL": "Xylem Inc.", "XYZ": "Block, Inc.", "YUM": "Yum! Brands, Inc.", "ZBH": "Zimmer Biomet Holdings, Inc.", "ZBRA": "Zebra Technologies Corporation", "ZTS": "Zoetis Inc."}, "rules": {"starting_cash": 10000, "invest_amount": 8000, "max_per_stock_pct": 30, "reserve_trade_max": 1000, "target_trade_value": 2500, "min_trade_value": 500, "brokerage_per_trade": 0, "slippage_pct": 0.05, "min_buy_score": 3, "stop_loss_pct": 4, "take_profit_pct": 1000, "sell_when_rsi_above": 101, "max_hold_days": 365, "rebuy_cooldown_days": 2, "weekly_target_pct": 8}, "strategy": {"mode": "momentum", "first_trade_time": "10:00", "max_buy_rsi": 70, "use_market_filter": true, "use_atr_stops": true, "atr_stop_mult": 3.0, "sell_below_sma50": false, "min_stop_pct": 3, "max_stop_pct": 12, "risk_per_trade_pct": 1.0, "use_event_filter": true, "event_days": 3, "min_avg_daily_value": 5000000, "use_quality_filter": false, "min_roe_pct": 10, "max_debt_to_equity": 1.5, "max_5d_gain_pct": 10, "max_per_sector": 1, "max_pe": 0, "max_above_sma200_pct": 0, "max_below_high_pct": 25, "skip_bearish_candle": true, "drawdown_cut_pct": 10, "drawdown_risk_mult": 0.5, "pyramid_trigger_r": 1, "pyramid_size": 0.5, "pyramid_max_adds": 1, "pyramid_cap_mult": 1.5, "pyramid_stop_to_entry": true, "max_lottery_pct": 4, "use_smooth_momentum": false, "max_info_discreteness": 0, "vol_target_pct": 0, "momentum_measure": "total", "high52_rank_weight": 0, "max_share_growth_pct": 20, "use_eps_growth_filter": false, "min_eps_growth_pct": 0, "max_accruals_pct": 0, "max_ivol_pct": 0, "max_turnover_rank": 0}, "market": {"ok": true, "index": 7549.9, "sma200": 7328.2, "filter_on": true}, "has_backtest": false, "reviews": [], "has_changes": false, "mk": {"code": "us", "title": "US Paper Trader", "index_name": "S&P 500", "suffix": "", "tz": "America/New_York", "city": "New York", "checks": "every hour", "config": "config_us.json", "reports": "reports/us", "currency": "USD", "due_from": 600, "due_last": 900, "late_minutes": 120, "delay": "can run up to 15 minutes behind"}};
+const MK = D.mk;
+const $ = id => document.getElementById(id);
+document.title = MK.title;
+$("title").textContent = MK.title;
+$("city").textContent = MK.city;
+$("checks").textContent = MK.checks;
+$("delayNote").textContent = MK.delay;
+const money = v => (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString("en-AU", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const signed = v => (v > 0 ? "+" : "") + money(v);
+const cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
+const when = iso => new Date(iso).toLocaleString("en-AU", {weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: MK.tz});
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const safe = text => String(text).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const yahooLink = code => `<a href="https://finance.yahoo.com/quote/${code}${MK.suffix}" target="_blank" rel="noopener" title="${safe(D.names[code] || code)}"><b>${code}</b></a>`;
+
+$("updated").textContent = D.updated;
+
+// A failed run can't rebuild this page, so the page itself works out that it is
+// out of date. All times here are Sydney clock times held as UTC.
+const MINUTE = 60000;
+const sydneyClock = time => {
+  const parts = new Intl.DateTimeFormat("en-US", {timeZone: MK.tz, hourCycle: "h23", year: "numeric",
+    month: "numeric", day: "numeric", hour: "numeric", minute: "numeric"}).formatToParts(time);
+  const p = Object.fromEntries(parts.map(x => [x.type, Number(x.value)]));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+};
+// The latest check that should have happened: an hour ago (GitHub often runs
+// scheduled jobs late or skips one), or 15:30 on the last session if that is
+// outside 10:00-16:00 Mon-Fri.
+function lastCheckDue(now) {
+  let t = now - MK.late_minutes * MINUTE;
+  for (;;) {
+    const d = new Date(t), day = d.getUTCDay(), mins = d.getUTCHours() * 60 + d.getUTCMinutes();
+    if (day >= 1 && day <= 5 && mins >= MK.due_from) return mins > MK.due_last ? t - (mins - MK.due_last) * MINUTE : t;
+    t -= (mins + 480) * MINUTE;  // back to 16:00 the day before
+  }
+}
+function showStaleAlert(now) {
+  const stale = Date.parse(D.updated_at + "Z") < lastCheckDue(now);
+  $("staleAlert").style.display = stale ? "block" : "none";
+  if (stale) $("staleAlert").textContent = `The agent has stopped checking. Its last successful check was ${D.updated}, ` +
+    `so the figures below may be out of date. Press Update now to fetch the latest results from GitHub. ` +
+    `If this warning stays, the GitHub job is failing: its Actions page shows why.`;
+}
+showStaleAlert(sydneyClock(new Date()));
+
+// Update now: the desktop icon's helper (open_dashboard.pyw) fetches the latest
+// results from GitHub, first starting a fresh check if the market is open.
+$("updateBtn").onclick = async () => {
+  const b = $("updateBtn"), note = $("updateNote");
+  b.disabled = true; b.textContent = "Updating...";
+  note.textContent = "During market hours this runs a fresh check on GitHub first, which takes about 2 minutes.";
+  try {
+    const r = await fetch("/update?market=" + MK.code, {method: "POST"});
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.message);
+    location.reload();
+  } catch (e) {
+    b.disabled = false; b.innerHTML = "&#8635; Update now";
+    note.textContent = location.protocol === "file:"
+      ? "Open this page from the ASX Paper Trader desktop icon to use Update."
+      : `Update failed${e.message ? ": " + e.message : ""}. Close this page and reopen the desktop icon.`;
+  }
+};
+$("feeNote").textContent = money(D.rules.brokerage_per_trade);
+$("slipNote").textContent = D.rules.slippage_pct ? ` plus a ${D.rules.slippage_pct}% price gap each way` : "";
+if (D.market && D.market.filter_on) {
+  $("marketNote").innerHTML = D.market.ok
+    ? `<br>Market filter: ${MK.index_name} (${D.market.index.toLocaleString("en-AU")}) is above its 200-day average, so new buys are allowed.`
+    : `<br><b>Market filter: ${MK.index_name} (${D.market.index.toLocaleString("en-AU")}) is below its 200-day average, so new buys are paused.</b>`;
+}
+
+const S = D.summary;
+const goalPct = Math.round(S.week / S.weekly_goal * 100);
+const stats = [
+  ["Weekly goal", `${goalPct}%`, `This week ${signed(S.week)} of ${money(S.weekly_goal)} target` +
+    `<div class="bar"><span style="width:${Math.max(0, Math.min(100, goalPct))}%"></span></div>`, cls(S.week)],
+  ["Portfolio value", money(S.equity), `Started with ${money(S.start)}`, ""],
+  ["Total profit / loss", signed(S.total), `${S.total_pct > 0 ? "+" : ""}${S.total_pct}%`, cls(S.total)],
+  ["Today", signed(S.today), "since yesterday's close", cls(S.today)],
+  ["This month", signed(S.month), "since the 1st", cls(S.month)],
+  ["Cash", money(S.cash), `${money(S.holdings)} in shares`, ""],
+  ["Trades", S.trades, S.win_rate === null ? "no sales yet" : `${S.win_rate}% of sales profitable`, ""],
+  ["Fees paid", money(S.fees), `Realised P/L ${signed(S.realised)}`, ""],
+];
+$("stats").innerHTML = stats.map(([l, v, s, c]) =>
+  `<div class="card stat"><div class="label">${l}</div><div class="value ${c}">${v}</div><div class="sub muted">${s}</div></div>`).join("");
+
+// positions
+$("positions").innerHTML = D.positions.length ? `
+  <tr><th>Code</th><th>Shares</th><th>Bought at</th><th>Total paid</th><th>Price now</th><th>Value</th><th>Profit / loss</th><th>Stop</th><th>Bought</th></tr>` +
+  D.positions.map(p => `<tr><td>${yahooLink(p.code)}</td><td>${p.qty}</td><td>${money(p.bought_at)}</td><td>${money(p.paid)}</td>
+    <td>${money(p.price)}</td><td>${money(p.value)}</td>
+    <td class="${cls(p.upl)}">${signed(p.upl)} (${p.upl_pct > 0 ? "+" : ""}${p.upl_pct}%)</td>
+    <td>${p.stop ? money(p.stop) : "-"}</td><td>${when(p.opened)}</td></tr>`).join("")
+  : `<tr><td class="empty">No shares held. All cash.</td></tr>`;
+
+// trades
+$("trades").innerHTML = D.trades.length ? `
+  <tr><th>Time</th><th>Action</th><th>Code</th><th>Shares</th><th>Price</th><th>Value</th><th>Profit / loss</th><th style="text-align:left">Why</th></tr>` +
+  D.trades.map(t => `<tr><td>${when(t.ts)}</td><td><span class="side ${t.side}">${t.side}</span></td>
+    <td>${yahooLink(t.code)}</td><td>${t.qty}</td><td>${money(t.price)}</td><td>${money(t.qty * t.price)}</td>
+    <td class="${cls(t.realised_pnl)}">${t.realised_pnl === null ? "" : signed(t.realised_pnl)}</td>
+    <td class="reason">${t.reason}</td></tr>`).join("")
+  : `<tr><td class="empty">No trades yet.</td></tr>`;
+
+const R = D.rules;
+const ST = D.strategy;
+const sells = [`its stop (${ST.use_atr_stops ? `${ST.atr_stop_mult}x its normal daily move, ${ST.min_stop_pct}-${ST.max_stop_pct}%` : `-${R.stop_loss_pct}%`})`];
+if (R.take_profit_pct < 100) sells.push(`+${R.take_profit_pct}% profit (allowed the same day)`);
+if (R.sell_when_rsi_above <= 100) sells.push(`RSI above ${R.sell_when_rsi_above}`);
+if (R.max_hold_days < 365) sells.push(`after ${R.max_hold_days} days`);
+if (ST.sell_below_sma50) sells.push("a fall below the 50-day average");
+$("rules").innerHTML = `Rules: buy ${MK.index_name} stocks scoring ${R.min_buy_score}+ ` +
+  `(${ST.mode === "momentum" ? "strong momentum vs the index, in an uptrend" : "classic oversold signals"}` +
+  `${ST.use_market_filter ? `, only while the ${MK.index_name} is above its 200-day average` : ""}` +
+  `${ST.use_event_filter ? `, skipping stocks with a dividend or results date in the next ${ST.event_days} days` : ""}` +
+  `${ST.use_quality_filter ? `, only profitable companies with ROE of ${ST.min_roe_pct}%+ and low debt` : ""}` +
+  `${ST.max_per_sector ? `, at most ${ST.max_per_sector} stock${ST.max_per_sector > 1 ? "s" : ""} per sector` : ""}` +
+  `${ST.max_5d_gain_pct ? `, not after a ${ST.max_5d_gain_pct}%+ jump in 5 days` : ""}` +
+  `${ST.max_below_high_pct ? `, within ${ST.max_below_high_pct}% of the 52-week high` : ""}` +
+  `${ST.skip_bearish_candle ? ", not on a bearish engulfing candle" : ""}` +
+  `${ST.max_lottery_pct ? `, not after extreme one-day spikes (top 5 daily gains in a month averaging over ${ST.max_lottery_pct}%)` : ""}` +
+  `${ST.max_share_growth_pct ? `, not companies that grew their share count over ${ST.max_share_growth_pct}% last year` : ""}). ` +
+  `${ST.pyramid_trigger_r ? `Buy ${Math.round((ST.pyramid_size ?? 0.5) * 100)}% more of a holding once it is up ` +
+    `${ST.pyramid_trigger_r}x its stop distance, then raise its stop to the buy price. ` : ""}` +
+  `${ST.drawdown_cut_pct ? `New trades are halved while the account is ${ST.drawdown_cut_pct}%+ below its peak. ` : ""}` +
+  `Invest up to ${money(R.invest_amount)} in about ${money(R.target_trade_value)} lots, then the reserve ` +
+  `(max ${money(R.reserve_trade_max)} each). Sell at ${sells.join(", ")}. ` +
+  `Goal: +${R.weekly_target_pct}% a week. Change these in ${MK.config}.` +
+  (D.has_backtest ? ` <a href="backtest.html">See how these rules did on past data &rarr;</a>` : "") +
+  (D.has_changes ? ` <a href="reports/strategy_changes.html">Rule changes and why &rarr;</a>` : "");
+
+// daily reviews, newest first
+const pct = v => v === null ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
+$("reviews").innerHTML = D.reviews.length ? `
+  <tr><th>Day</th><th>Portfolio</th><th>${MK.index_name}</th><th>Market's share</th><th>Picking and costs</th><th>Brokerage</th><th>Trades</th><th>Full review</th></tr>` +
+  D.reviews.map(r => `<tr><td>${r.date}</td><td class="${cls(r.change)}">${signed(r.change)} (${pct(r.change_pct)})</td>
+    <td class="${cls(r.index_pct)}">${pct(r.index_pct)}</td><td class="${cls(r.market_part)}">${signed(r.market_part)}</td>
+    <td class="${cls(r.change - r.market_part)}">${signed(r.change - r.market_part)}</td><td>${money(r.fees)}</td>
+    <td>${r.buys + r.sells}</td><td><a href="${MK.reports}/daily/${r.date}.html">Open</a></td></tr>`).join("")
+  : `<tr><td class="empty">The first review is written after 4pm on a trading day.</td></tr>`;
+$("reviewNotes").innerHTML = D.reviews.length ? D.reviews[0].notes.map(n => `<li>${safe(n)}</li>`).join("") : "";
+
+// charts
+if (window.Chart) {
+  Chart.defaults.color = css("--muted");
+  Chart.defaults.borderColor = css("--line");
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+  new Chart($("equityChart"), {
+    type: "line",
+    data: {
+      labels: D.equity_series.map(p => p[0]),
+      datasets: [
+        {label: "Portfolio value", data: D.equity_series.map(p => p[1]), borderColor: css("--accent"),
+         backgroundColor: css("--accent"), borderWidth: 2, tension: .2,
+         pointRadius: D.equity_series.length < 40 ? 3 : 0},
+        {label: "Starting cash", data: D.equity_series.map(() => S.start), borderColor: css("--muted"),
+         borderDash: [4, 4], borderWidth: 1, pointRadius: 0},
+      ],
+    },
+    options: {maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => `${c.dataset.label}: ${money(c.parsed.y)}`}}},
+      scales: {x: {ticks: {maxTicksLimit: 8}}, y: {ticks: {callback: v => money(v)}}}},
+  });
+}
+
+let periodChart;
+function showPeriod(k) {
+  document.querySelectorAll("#periodTabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k));
+  const rows = D[k];
+  const label = {daily: "Day", weekly: "Week ending", monthly: "Month"}[k];
+  const fmt = p => k === "monthly" ? new Date(p).toLocaleString("en-AU", {month: "short", year: "numeric"}) : p;
+  const goal = k === "weekly";
+  $("periodTable").innerHTML = rows.length ? `<tr><th>${label}</th><th>Value</th><th>Change</th>${goal ? "<th>Goal</th>" : ""}</tr>` +
+    rows.slice(0, 12).map(r => `<tr><td>${fmt(r.period)}</td><td>${money(r.equity)}</td>
+      <td class="${cls(r.change)}">${signed(r.change)} (${r.pct > 0 ? "+" : ""}${r.pct}%)</td>
+      ${goal ? `<td class="${r.change >= S.weekly_goal ? "up" : "muted"}">${r.change >= S.weekly_goal ? "Hit" : "Missed"}</td>` : ""}</tr>`).join("")
+    : `<tr><td class="empty">No history yet.</td></tr>`;
+  if (!window.Chart) return;
+  const series = rows.slice(0, 30).reverse();
+  periodChart?.destroy();
+  periodChart = new Chart($("periodChart"), {
+    type: "bar",
+    data: {labels: series.map(r => fmt(r.period)),
+      datasets: [{data: series.map(r => r.change), borderRadius: 4,
+        backgroundColor: series.map(r => r.change >= 0 ? css("--up") : css("--down"))}]},
+    options: {maintainAspectRatio: false, plugins: {legend: {display: false},
+      tooltip: {callbacks: {label: c => signed(c.parsed.y)}}},
+      scales: {y: {ticks: {callback: v => money(v)}}}},
+  });
+}
+document.querySelectorAll("#periodTabs button").forEach(b => b.onclick = () => showPeriod(b.dataset.k));
+showPeriod("daily");
+</script>
+</body>
+</html>

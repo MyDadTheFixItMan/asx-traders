@@ -1,0 +1,124 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Rule changes</title><style>:root{--bg:#f6f7f9;--text:#16181d}@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--text:#e7e9ee}}body{margin:0;background:var(--bg);color:var(--text)}pre{white-space:pre-wrap;max-width:980px;margin:0 auto;padding:24px 16px;font:13px/1.5 ui-monospace,Consolas,monospace}</style></head><body><pre># Rule changes and why
+
+Every change to the trading rules is recorded here, newest first, with the
+evidence behind it. Changes to buy and sell rules go live only if they pass
+`python -m asx_agent.evaluate`, which tests them over 3 and 9 years from four
+start dates each. Fixes to how trades are carried out (timing, data checks)
+can&#x27;t be tested on daily prices; they are made only to stop the paper ledger
+recording trades that couldn&#x27;t really happen, and are recorded here too.
+
+To undo a change, restore the setting named in its entry in `config.json`.
+
+## 2026-11-08 (evening): Share-issuance filter switched on
+
+- **Setting:** `strategy.max_share_growth_pct: 20` (previous file in
+  `data/config_backups/config_2026-11-08c.json`). Skips buying a company whose
+  share count grew more than 20% in its latest financial year (accounts treated
+  as public 90 days after the year end). Stocks with no share figures pass.
+  Holdings are not sold because of it, but it blocks adding to them.
+- **Why:** companies that issue many new shares (capital raisings, takeovers
+  paid in shares) tend to do worse afterwards: Pontiff &amp; Woodgate (2008,
+  Journal of Finance) in the US; on the ASX, Lancaster &amp; Bornholt found big
+  non-issuers beat big heavy issuers by about 0.84% a month over 1990–2009
+  ([Quantpedia summary](https://vvv.quantpedia.com/?p=520)), and Li, Naidu,
+  Navissi &amp; Ranjeeni (2018, Australian Journal of Management) found the effect
+  comes from issuers, not buybacks
+  ([record](https://research.monash.edu/en/publications/net-stock-issuance-anomaly-and-cash-flow-explanation-a-research-n/)).
+  Moderate, peer-reviewed evidence, including on Australian shares.
+- **Evaluation** (3 years, `reports/evaluations/2026-11-08 Skip share issuance over 20 pct.md`):
+  median +54.9% against +40.8%, worst start +23.7% against +20.8%, median worst
+  drop −12.1% against −12.5%, 187 trades against 192. Neighbours: 15% and 30%
+  gave the same result; 5% and 10% gave +55.2%, worst start +29.0% but a
+  slightly deeper drop (−13.1%), which is why 20% was chosen.
+- **Caution:** 15%, 20% and 30% give identical results, so the gain comes from
+  skipping a handful of trades in heavy issuers (often companies that took over
+  another with shares, such as ALK, JHX, WGX, RMS). Yahoo has only about four
+  years of share counts, so the filter has little data at the very start of
+  the 3-year test.
+- **Tested and not adopted the same evening:** ranking partly on nearness to
+  the 52-week high (weights 0.25, 0.5, 0.75: +33.6%, +39.3%, +17.7%) and a
+  minimum buy score of 4, 5 or 6 (+46.6% passed alone but 5&#x27;s drop was deeper;
+  6 was −4.8%).
+- **Undo:** set `max_share_growth_pct` to 0.
+
+## 2026-11-08: Lottery-stock filter switched on
+
+- **Setting:** `strategy.max_lottery_pct: 4` (previous file in
+  `data/config_backups/config_2026-11-08b.json`). Skips a stock when the average
+  of its 5 biggest daily gains over the last 21 trading days is above 4%.
+- **Why:** the user asked for continued research to make money. Bali, Cakici &amp;
+  Whitelaw (2011, Journal of Financial Economics) found stocks with extreme
+  recent daily gains go on to underperform; Gorman et al. (2022, Critical
+  Finance Review) found the same pattern and put it down to overreaction. It
+  also suits a momentum strategy, which can otherwise buy stocks straight after
+  a spike.
+- **Evaluation** (3 years, `reports/evaluations/2026-11-08 Skip lottery stocks MAX 4 pct.md`):
+  median +49.5% against +44.4%, worst start +22.2% against +16.1%, median worst
+  drop −12.0% against −13.3%. Nearby settings: 3.5% passed (+47.1%, worst start
+  +30.0%); 3%, 4.5% and 5% didn&#x27;t beat the median by 2 points but all had a
+  better worst start than the current rules.
+- **Tested and not adopted the same day:** smooth momentum, volatility targeting
+  (12% and 15%) and residual momentum (see README).
+- **Undo:** set `max_lottery_pct` to 0.
+
+## 2026-11-08: Rules from trading books switched on; tests use 3 years only
+
+- **Settings** (`config.json` → `strategy`; the previous file is in
+  `data/config_backups/config_2026-11-08.json`):
+  - `max_below_high_pct: 25` – buy only within 25% of the 52-week high (O&#x27;Neil, Livermore)
+  - `skip_bearish_candle: true` – skip a stock on a bearish engulfing day (Nison)
+  - `drawdown_cut_pct: 10` – half-size new trades while 10%+ below the peak (Market Wizards)
+  - `pyramid_trigger_r: 1` (with `pyramid_size` 0.5, `pyramid_max_adds` 1,
+    `pyramid_cap_mult` 1.5, `pyramid_stop_to_entry` true) – once a holding is up one
+    stop distance, buy half as many shares again and raise its stop to the buy price (Livermore)
+- **Why:** the user asked for rules from nine trading books and chose to switch
+  these on because together they did better over the last 3 years. The user also
+  decided that rules are judged on the last 3 years only, so `evaluate.py` no
+  longer runs the 9-year test.
+- **Evidence** (`reports/evaluations/2026-11-08 Book rules combined with Livermore adds.md`):
+  - 3 years, median of four start dates: +44.4% against +37.1% for the earlier
+    rules; worst start +16.1% against +17.3%; median worst drop −13.3% against −15.9%.
+  - 9 years (shown to the user before deciding): −8.2% against +142.6%, worst
+    drop −41.1% against −29.4%. Over 9 years each rule except the candle filter
+    lost ground alone, and together they did much worse.
+- **Holdings bought before this change** use their average cost as the buy price
+  for the adding rule.
+- **Undo:** set those four settings back to 0 / false (or restore the backup).
+  To restore the 9-year test, revert the 8 Nov change to `asx_agent/evaluate.py`.
+
+## 2026-11-04: Trader moved to GitHub, checks every 15 minutes
+
+- **Change:** the trader runs on GitHub Actions (private repository
+  `MyDadTheFixItMan/asx-trade-agent`) so the PC doesn&#x27;t need to be on. The
+  Windows task &quot;ASX Paper Trader&quot; is disabled. The ledger carried over unchanged.
+- **Why every 15 minutes, not 5:** the user&#x27;s choice, so the runs fit inside
+  GitHub&#x27;s free 2,000 minutes a month for private repositories. The rules only
+  use daily prices that run about 20 minutes late, so this mostly changes how
+  quickly a stop is acted on.
+- **Undo:** disable the workflow on GitHub, then re-enable the Windows task.
+
+## 2026-11-03: Trade only after 10:30, on today&#x27;s prices
+
+- **Setting:** `strategy.first_trade_time: &quot;10:30&quot;`, plus a check that today&#x27;s prices exist.
+- **Why:** on 2 Nov the agent bought six stocks between 10:00 and 10:15. Yahoo&#x27;s
+  prices are about 20 minutes late, so those buys used Friday&#x27;s closing prices.
+  The real opening prices were lower for most of them: ALK opened 3.6% below,
+  WAF 4.3% below and PRU 3.4% below what the ledger paid. The ledger was
+  recording fills nobody could get. Waiting until 10:30 means prices from after
+  the opening auction have arrived. The same check stops trading on any day
+  with no prices, such as a public holiday missing from `market_holidays`.
+- **Risk:** if Yahoo ever fails to show a price bar for today, the agent won&#x27;t
+  trade that day. The log says &quot;No prices for today yet&quot; when this happens,
+  and the daily check looks for it.
+
+## 2026-11-03: Daily review and change test added
+
+- Daily review (`asx_agent/review.py`) written at 4pm each trading day to
+  `reports/daily/`, splitting each day&#x27;s result into market, stock picking and costs.
+- Change test (`asx_agent/evaluate.py`) that every rule change must pass.
+- Instructions for a weekly research and improvement session and a short check
+  after each trading day are in `automation/`. They run as Claude scheduled
+  tasks: &quot;ASX daily check&quot; (weekdays about 4:30pm) and &quot;ASX weekly
+  improvement&quot; (Saturdays about 9am), created 3 Nov. They run only while the
+  Claude app is open; a missed run starts when the app next opens.
+</pre></body></html>
