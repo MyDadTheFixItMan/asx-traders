@@ -9,6 +9,33 @@ recording trades that couldn&#x27;t really happen, and are recorded here too.
 
 To undo a change, restore the setting named in its entry in `config.json`.
 
+## 2026-11-23: Skip high-beta stocks (beta above 1.4)
+
+- **Setting:** `strategy.max_beta: 1.4` (previous file in
+  `data/config_backups/config_2026-11-23.json`). Skips buying, or adding to, a
+  stock whose 1-year beta to the ASX 200 is above 1.4 (it moves more than 1.4×
+  the index). Stocks with too little history pass. Holdings are not sold
+  because of it.
+- **Why:** Daniel &amp; Moskowitz (&quot;Momentum Crashes&quot;, J. Financial Economics 2016,
+  [NBER w20439](https://www.nber.org/system/files/working_papers/w20439/w20439.pdf))
+  show momentum&#x27;s worst losses come from winners whose beta is high when the
+  market turns. Strong evidence for long-short portfolios; weaker for
+  long-only ones.
+- **Evaluation** (3 years, four start dates, week-48 prices, accounts refreshed in
+  the run; `reports/evaluations/2026-11-23 Skip beta above 14 week 48.md`):
+  median +48.0% against +40.4%, worst start +4.5% against −3.5%, median worst
+  drop −15.5% against −16.2%, 180 trades against 176.
+  Neighbours the same day: 1.25 gave +44.9%, worst start +1.5%, drop −14.3%
+  (passed); 1.5 gave +42.0% against its own run&#x27;s +46.0%, but a better worst start
+  (+1.3% against −3.2%) and drop (−14.5% against −14.9%); 1.1 gave +30.6%, worst
+  start +28.3%, drop −16.3%. Earlier, on week-47 prices, 1.25 and 1.4 passed
+  twice (17 and 18 Nov: 1.4 +65.0% against +42.8%, worst start +51.4% against
+  +13.7%).
+- **Caution:** the gain comes from skipping a modest number of trades, and on
+  week-47 prices 1.1 and 1.5 had worse worst starts than the current rules,
+  so part of this may be luck. Review after 4 weeks of live trading.
+- **Undo:** set `max_beta` to 0.
+
 ## 2026-11-10: US Paper Trader only: 1 stock per sector, no quality filter
 
 - **Settings (config_us.json only; the ASX rules are unchanged):** `strategy.max_per_sector: 1`,
