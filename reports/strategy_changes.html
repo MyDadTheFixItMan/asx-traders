@@ -9,6 +9,33 @@ recording trades that couldn&#x27;t really happen, and are recorded here too.
 
 To undo a change, restore the setting named in its entry in `config.json`.
 
+## 2026-11-24: No new buys while the market is very volatile (above 18% a year)
+
+- **Setting:** `strategy.max_market_vol_pct: 18` (previous file in
+  `data/config_backups/config_2026-11-24.json`). Part of the market filter: no
+  new buys (or adds) while the ASX 200&#x27;s daily moves over the last 21 trading
+  days, annualised, are above 18%. Holdings and stops are unchanged. Works on
+  prices alone, so it is live from the next run.
+- **Why:** Wang &amp; Xu (&quot;Market volatility and momentum&quot;, J. Empirical Finance 30,
+  2015, [RePEc](https://ideas.repec.org/a/eee/empfin/v30y2015icp79-91.html)) find
+  market volatility predicts poor momentum returns, even after allowing for
+  market state, and absorbs much of the market-state effect. Daniel &amp; Moskowitz
+  (2016) find momentum crashes follow volatile falling markets. Strong US
+  evidence; no ASX-specific test found.
+- **Evaluation** (3 years, four start dates, week-48 prices, accounts refreshed in
+  the run; `reports/evaluations/2026-11-24 No buys when market volatility above 18 pct.md`):
+  median +61.0% against +46.3%, worst start +18.2% against +6.6%, median worst
+  drop −13.7% against −14.7%, 176 trades against 180.
+  Neighbours the same day: 15% gave +51.0%, worst start +6.6%, drop −14.2%
+  (passed); 20% gave +37.7%, worst start +10.6%, drop −13.4% (failed on median,
+  better on worst start and drop); 22% and 26% gave +34.8%, worst start +8.0%,
+  drop −15.4%.
+- **Caution:** the median jumps around between neighbouring settings (+51%,
+  +61%, +38%), so the size of the gain depends on which few buys it skips. The
+  steadier benefit is on worst start and drawdown. Review after 4 weeks live
+  (from 22 Dec).
+- **Undo:** set `max_market_vol_pct` to 0.
+
 ## 2026-11-23: Skip high-beta stocks (beta above 1.4)
 
 - **Setting:** `strategy.max_beta: 1.4` (previous file in
